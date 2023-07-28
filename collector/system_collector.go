@@ -404,6 +404,15 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			// get system OdataID
 			//systemOdataID := system.ODataID
 
+			wg1 := &sync.WaitGroup{}
+			wg2 := &sync.WaitGroup{}
+			wg3 := &sync.WaitGroup{}
+			wg4 := &sync.WaitGroup{}
+			wg5 := &sync.WaitGroup{}
+			wg6 := &sync.WaitGroup{}
+			wg7 := &sync.WaitGroup{}
+			wg8 := &sync.WaitGroup{}
+
 			// process memory metrics
 			// construct memory Link
 			//memoriesLink := fmt.Sprintf("%sMemory/", systemOdataID)
@@ -415,7 +424,7 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			} else if memories == nil {
 				systemLogContext.WithField("operation", "system.Memory()").Info("no memory data found")
 			} else {
-				wg1 := &sync.WaitGroup{}
+				// wg1 := &sync.WaitGroup{}
 				wg1.Add(len(memories))
 
 				for _, memory := range memories {
@@ -435,7 +444,7 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			} else if processors == nil {
 				systemLogContext.WithField("operation", "system.Processors()").Info("no processor data found")
 			} else {
-				wg2 := &sync.WaitGroup{}
+				// wg2 := &sync.WaitGroup{}
 				wg2.Add(len(processors))
 
 				for _, processor := range processors {
@@ -459,7 +468,7 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 					if volumes, err := storage.Volumes(); err != nil {
 						systemLogContext.WithField("operation", "system.Volumes()").WithError(err).Error("error getting storage data from system")
 					} else {
-						wg3 := &sync.WaitGroup{}
+						// wg3 := &sync.WaitGroup{}
 						wg3.Add(len(volumes))
 
 						for _, volume := range volumes {
@@ -473,7 +482,7 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 					} else if drives == nil {
 						systemLogContext.WithFields(log.Fields{"operation": "system.Drives()", "storage": storage.ID}).Info("no drive data found")
 					} else {
-						wg4 := &sync.WaitGroup{}
+						// wg4 := &sync.WaitGroup{}
 						wg4.Add(len(drives))
 						for _, drive := range drives {
 							go parseDrive(ch, systemHostName, drive, wg4)
@@ -514,7 +523,7 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			} else if pcieDevices == nil {
 				systemLogContext.WithField("operation", "system.PCIeDevices()").Info("no PCI-E device data found")
 			} else {
-				wg5 := &sync.WaitGroup{}
+				// wg5 := &sync.WaitGroup{}
 				wg5.Add(len(pcieDevices))
 				for _, pcieDevice := range pcieDevices {
 					go parsePcieDevice(ch, systemHostName, pcieDevice, wg5)
@@ -528,7 +537,7 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			} else if networkInterfaces == nil {
 				systemLogContext.WithField("operation", "system.NetworkInterfaces()").Info("no network interface data found")
 			} else {
-				wg6 := &sync.WaitGroup{}
+				// wg6 := &sync.WaitGroup{}
 				wg6.Add(len(networkInterfaces))
 				for _, networkInterface := range networkInterfaces {
 					go parseNetworkInterface(ch, systemHostName, networkInterface, wg6)
@@ -543,7 +552,7 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			} else if ethernetInterfaces == nil {
 				systemLogContext.WithField("operation", "system.PCIeDevices()").Info("no ethernet interface data found")
 			} else {
-				wg7 := &sync.WaitGroup{}
+				// wg7 := &sync.WaitGroup{}
 				wg7.Add(len(ethernetInterfaces))
 				for _, ethernetInterface := range ethernetInterfaces {
 					go parseEthernetInterface(ch, systemHostName, ethernetInterface, wg7)
@@ -559,13 +568,23 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			} else {
 				for _, simpleStorage := range simpleStorages {
 					devices := simpleStorage.Devices
-					wg8 := &sync.WaitGroup{}
+					// wg8 := &sync.WaitGroup{}
 					wg8.Add(len(devices))
 					for _, device := range devices {
 						go parseDevice(ch, systemHostName, device, wg8)
 					}
 				}
 			}
+
+			wg1.Wait()
+			wg2.Wait()
+			wg3.Wait()
+			wg4.Wait()
+			wg5.Wait()
+			wg6.Wait()
+			wg7.Wait()
+			wg8.Wait()
+
 			systemLogContext.Info("collector scrape completed")
 		}
 		s.collectorScrapeStatus.WithLabelValues("system").Set(float64(1))

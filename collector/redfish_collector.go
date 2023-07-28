@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/apex/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +24,11 @@ const (
 	picoSeconds = 1e12
 )
 
+// sync.Map of RedfishClients by hostname/IP.
+type RedfishClients struct {
+  sync.Map
+}
+
 // Metric descriptors.
 var (
 	totalScrapeDurationDesc = prometheus.NewDesc(
@@ -30,6 +36,7 @@ var (
 		"Collector time duration.",
 		nil, nil,
 	)
+	redfishClients RedfishClients
 )
 
 // RedfishCollector collects redfish metrics. It implements prometheus.Collector.
@@ -43,16 +50,22 @@ type RedfishCollector struct {
 func NewRedfishCollector(host string, username string, password string, logger *log.Entry) *RedfishCollector {
 	var collectors map[string]prometheus.Collector
 	collectorLogCtx := logger
-	redfishClient, err := newRedfishClient(host, username, password)
+	redfishClient, err := newRedfishClient(host, username, password, collectorLogCtx)
 	if err != nil {
 		collectorLogCtx.WithError(err).Error("error creating redfish client")
 	} else {
+		// Add client to redfishClients sync.Map.
+		redfishClients.Store(host, redfishClient)
+
 		chassisCollector := NewChassisCollector(namespace, redfishClient, collectorLogCtx)
 		systemCollector := NewSystemCollector(namespace, redfishClient, collectorLogCtx)
 		managerCollector := NewManagerCollector(namespace, redfishClient, collectorLogCtx)
 
 		collectors = map[string]prometheus.Collector{"chassis": chassisCollector, "system": systemCollector, "manager": managerCollector}
 	}
+	// Debug.
+	// TODO: Remove me, or at least put behind a Debug flag.
+	// collectorLogCtx.WithField("clients", redfishClients).Info("stored redfish clients")
 
 	return &RedfishCollector{
 		redfishClient: redfishClient,
@@ -81,7 +94,8 @@ func (r *RedfishCollector) Collect(ch chan<- prometheus.Metric) {
 
 	scrapeTime := time.Now()
 	if r.redfishClient != nil {
-		defer r.redfishClient.Logout()
+		// TODO: Make the following conditional on a new 'use_sessions' (or similar) config var.
+		// defer r.redfishClient.Logout()
 		r.redfishUp.Set(1)
 		wg := &sync.WaitGroup{}
 		wg.Add(len(r.collectors))
@@ -101,8 +115,45 @@ func (r *RedfishCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(totalScrapeDurationDesc, prometheus.GaugeValue, time.Since(scrapeTime).Seconds())
 }
 
-func newRedfishClient(host string, username string, password string) (*gofish.APIClient, error) {
+// clientConnected determines whether a stored Redfish Client Session is still active by querying
+// active Sessions on the host and checking that the Client Session ID is present in the host
+// Sessions list.
+func clientConnected(redfishClient *gofish.APIClient, logger *log.Entry) (bool) {
+	collectorLogCtx := logger
 
+	var sessionPresent bool = false
+
+	clientSession, err := redfishClient.GetSession()
+	if err != nil {
+		panic(err)
+	}
+	// Remove trailing '/' if present.
+	clientSessionIDURL := strings.TrimSuffix(clientSession.ID, "/")
+	// Example clientSessionIDURL: /redfish/v1/SessionService/Sessions/1234
+	clientSessionIDURLElements := strings.Split(clientSessionIDURL, "/")
+	clientSessionID := clientSessionIDURLElements[len(clientSessionIDURLElements) - 1]
+
+	service := redfishClient.Service
+	sessions, err := service.Sessions()
+	if err != nil {
+		collectorLogCtx.WithField("operation", "service.Sessions()").WithError(err).Error("error getting session list from system")
+		// We may be unable to query some sessions (especially if they are ephemeral).  Our goal is to
+		// prove connectivity.  As long as we can query at least one session, then we are able to
+		// connect.  Return false if we are unable to connect to any sessions.
+		if len(sessions) == 0 {
+		  return false
+		}
+	}
+	for _, session := range sessions {
+		if session.ID == clientSessionID {
+			sessionPresent = true
+		}
+	}
+
+	return sessionPresent
+}
+
+func createClient(host string, username string, password string) (*gofish.APIClient, error) {
 	url := fmt.Sprintf("https://%s", host)
 
 	config := gofish.ClientConfig{
@@ -116,6 +167,20 @@ func newRedfishClient(host string, username string, password string) (*gofish.AP
 		return nil, err
 	}
 	return redfishClient, nil
+}
+
+func newRedfishClient(host string, username string, password string, logger *log.Entry) (*gofish.APIClient, error) {
+	client_result, target_found := redfishClients.Load(host)
+	if target_found {
+		existing_client := client_result.(*gofish.APIClient)
+		if clientConnected(existing_client, logger) {
+			return existing_client, nil
+		} else {
+			return createClient(host, username, password)
+		}
+	} else {
+		return createClient(host, username, password)
+	}
 }
 
 func parseCommonStatusHealth(status gofishcommon.Health) (float64, bool) {
