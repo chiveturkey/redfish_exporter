@@ -422,6 +422,16 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			// get system OdataID
 			//systemOdataID := system.ODataID
 
+			wg1 := &sync.WaitGroup{}
+			wg2 := &sync.WaitGroup{}
+			wg3 := &sync.WaitGroup{}
+			wg4 := &sync.WaitGroup{}
+			wg5 := &sync.WaitGroup{}
+			wg6 := &sync.WaitGroup{}
+			wg7 := &sync.WaitGroup{}
+			wg8 := &sync.WaitGroup{}
+			wg9 := &sync.WaitGroup{}
+
 			// process memory metrics
 			// construct memory Link
 			//memoriesLink := fmt.Sprintf("%sMemory/", systemOdataID)
@@ -597,6 +607,17 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 					go parsePcieFunction(ch, systemHostName, pcieFunction, wg9)
 				}
 			}
+
+			wg1.Wait()
+			wg2.Wait()
+			wg3.Wait()
+			wg4.Wait()
+			wg5.Wait()
+			wg6.Wait()
+			wg7.Wait()
+			wg8.Wait()
+			wg9.Wait()
+
 			systemLogContext.Info("collector scrape completed")
 		}
 		s.collectorScrapeStatus.WithLabelValues("system").Set(float64(1))
