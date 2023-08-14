@@ -593,15 +593,18 @@ func parseNetworkAdapter(ch chan<- prometheus.Metric, chassisID string, networkA
 		ch <- prometheus.MustNewConstMetric(chassisMetrics["chassis_network_adapter_health_state"].desc, prometheus.GaugeValue, networkAdapterHealthStateValue, chassisNetworkAdapterLabelValues...)
 	}
 
-	if networkPorts, err := networkAdapter.NetworkPorts(); err != nil {
-		return err
-	} else {
-		wg6 := &sync.WaitGroup{}
-		wg6.Add(len(networkPorts))
-		for _, networkPort := range networkPorts {
-			go parseNetworkPort(ch, chassisID, networkPort, networkAdapterName, networkAdapterID, wg6)
+	// HACKTAG: Ignore Dell NICs with non-unique IDs for now.
+	if networkAdapterID != "NIC.Slot.3" {
+		if networkPorts, err := networkAdapter.NetworkPorts(); err != nil {
+			return err
+		} else {
+			wg6 := &sync.WaitGroup{}
+			wg6.Add(len(networkPorts))
+			for _, networkPort := range networkPorts {
+				go parseNetworkPort(ch, chassisID, networkPort, networkAdapterName, networkAdapterID, wg6)
+			}
+			wg6.Wait()
 		}
-		wg6.Wait()
 	}
 	return nil
 }
