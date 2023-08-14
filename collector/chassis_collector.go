@@ -594,7 +594,7 @@ func parseNetworkAdapter(ch chan<- prometheus.Metric, chassisID string, networkA
 	}
 
 	// HACKTAG: Ignore Dell NICs with non-unique IDs for now.
-	if networkAdapterID != "NIC.Slot.3" {
+	if networkAdapterID != "NIC.Slot.1" && networkAdapterID != "NIC.Slot.2" && networkAdapterID != "NIC.Slot.3" {
 		if networkPorts, err := networkAdapter.NetworkPorts(); err != nil {
 			return err
 		} else {
