@@ -593,8 +593,9 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 			} else if pcieFunctions == nil {
 				systemLogContext.WithField("operation", "system.PCIeFunctions()").Info("no PCI-E device function data found")
 			} else {
-				wg9.Add(len(pcieFunctions))
-				for _, pcieFunction := range pcieFunctions {
+				pcieFunctionsDeduplicated := deduplicatePCIeFunctions(pcieFunctions)
+				wg9.Add(len(pcieFunctionsDeduplicated))
+				for _, pcieFunction := range pcieFunctionsDeduplicated {
 					go parsePcieFunction(ch, systemHostName, pcieFunction, wg9)
 				}
 			}
@@ -613,6 +614,27 @@ func (s *SystemCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 		s.collectorScrapeStatus.WithLabelValues("system").Set(float64(1))
 	}
+}
+
+// HACKTAG: Some Dell R630 BMCs return duplicate PCIeFunctions.  Iterate through PCIeFunctions by
+// name.  Keep the first occurrence of each name.
+func deduplicatePCIeFunctions(pcieFunctions []*redfish.PCIeFunction) ([]*redfish.PCIeFunction) {
+	pcieFunctionsMap := make(map[string]*redfish.PCIeFunction)
+
+	for _, pcieFunction := range pcieFunctions {
+		// Add pcieFunction to the map if the pcieFunctions.Name key is not found in the map.
+		if _, exists := pcieFunctionsMap[pcieFunction.Name]; !exists {
+			pcieFunctionsMap[pcieFunction.Name] = pcieFunction
+		}
+	}
+
+	var pcieFunctionsDeduplicated []*redfish.PCIeFunction
+
+	for _, pcieFunction := range pcieFunctionsMap {
+		pcieFunctionsDeduplicated = append(pcieFunctionsDeduplicated, pcieFunction)
+	}
+
+	return pcieFunctionsDeduplicated
 }
 
 func parseMemory(ch chan<- prometheus.Metric, systemHostName string, memory *redfish.Memory, wg *sync.WaitGroup) {
